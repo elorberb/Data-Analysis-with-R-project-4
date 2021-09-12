@@ -1,0 +1,340 @@
+---
+title: "Homework 4"
+author: "Almog & Tomer"
+date: "4/27/2021"
+output: html_document
+---
+
+# Homework 4
+
+[Name: Etay Arie Lorberboym]{.ul}
+
+[ID: 314977596]{.ul}
+
+## Instructions
+
+1.  All assignments are individual!
+2.  This assignment should be uploaded as two files: "rmd" and "html" (after knit) before 11/5/2021, 23:59.
+3.  For good grades, pay attention to the previous worked we have published and the notes about how to improve your work in next homeworks.
+4.  Questions about the assignment should be asked using the Assignments forums.
+5.  Because this is an advanced course, questions about compilation and installment of R and libraries will not be answered! (Look it up in Google)
+6.  All of the instructions of this assignment should be included in the final .html file.
+7.  Further instructions are available on Moodle.
+
+## Exercises
+
+In this assignment you will work with lego sales data. The dataset contains two different tables which are related and needs to be merged in order to complete all the exercises.
+
+**PLEASE NOTE** There are no additional chuncks added to this assignment, you need to create and name the chunks, and if any of the chunks are complicated you need to explain what you need. Here is an example:
+
+```{r an_example_chunk_name, echo=TRUE}
+# The code here only consists a comment so it is not really complicated
+```
+
+First of all we will load the packages we need for this asasignment
+
+```{r load tidyverse}
+library(tidyverse, verbose = F)
+```
+
+Secondly, we will save the data sets in variables
+
+```{r read csvs}
+lego <- read.csv("C:\\Users\\itay7\\Documents\\data\\lego_sales.csv")
+customers <- read.csv("C:\\Users\\itay7\\Documents\\data\\customers.csv")
+```
+
+I would want to have a glimpse over the data to decide the best way to join the data sets for exercise 1
+
+```{r glimpse customers}
+glimpse(customers)
+```
+
+```{r glimpse lego}
+glimpse(lego)
+```
+
+### Exercise 1.
+
+Merge the two datasets in folder `data`.
+
+#### answer 1:
+
+I can see that in the lego data set the name is separated and in the customers data set has a full name column, so i would create a full name column in the lego data set and join the data sets based on this column.
+
+```{r add full name col}
+lego_full_name <-lego %>%
+  mutate(full_name =str_c(first_name," ",last_name))
+head(lego_full_name)
+```
+
+Now we will join the data sets with the join function.
+
+```{r - left join by full name}
+lego_customers <- lego_full_name %>%
+  left_join(customers, by = "full_name")
+head(lego_customers)
+```
+
+### Exercises 2-3.
+
+There are missing values in column `us_price`. Therefore, it's your job to complete those missing values:
+
+Some of the lego sets already have both an actual price and a missing price. Find those sets and replace the missing values with the actual price.
+
+#### answer 2:
+
+First of all, i will check which rows have null in the us price column
+
+```{r - check null before change}
+lego_customers %>% 
+  filter(is.na(us_price)) %>% 
+  nrow()
+```
+
+I will create a data table and merge the rows where there is actual price.
+
+Then i will turn it back to a data frame
+
+```{r}
+#install.packages("data.table")
+library(data.table)
+```
+
+```{r - merge rows with actual price}
+setDT(lego_customers)[, us_price:= us_price[!is.na(us_price)][1L] , by = name]
+class(lego_customers) <- class(as.data.frame(lego_customers))
+```
+
+Now I will check how many missing values by us price column left in the data frame
+
+```{r - check null after update 1}
+lego_customers %>% 
+  filter(is.na(us_price)) %>% 
+  nrow()
+```
+
+We can see that there are only 3 rows left with missing price.
+
+### Question 3
+
+Some of the lego sets do not have an actual price in the data. For those sets, complete the price based on the average price per piece with the same theme. (HINT: use `theme`, `pieces`, `theme` columns)
+
+#### answer 3:
+
+I will calculate the average price of a piece per each theme and then will insert them to the na values.
+
+```{r - update null value 2}
+avg_price_df <-lego_customers%>% drop_na() %>%
+  group_by(theme) %>%
+  summarise(us_price = sum(us_price*pieces)/sum(pieces))
+ 
+lego_customers <-lego_customers %>%
+  left_join(avg_price_df, by = "theme") %>%
+  mutate(us_price = round(coalesce(us_price.x,us_price.y),2)) %>%
+  select(-c(us_price.x,us_price.y)) %>%
+  relocate(us_price, .after = pieces)
+```
+
+Lets check how many us price missing values left
+
+```{r - check null after update 2 }
+lego_customers %>% 
+  filter(is.na(us_price)) %>% 
+  nrow()
+```
+
+We can see that there are no more rows with missing values.
+
+### Exercise 4.
+
+What are the three most common themes of Lego sets purchased?
+
+#### answer 4:
+
+I will count the purchases by counting the themes , sort them and present only the 3 first themes.
+
+I decided to count the purchases and not the number of lego sets purchased because i wanted to know how many people bought each theme.
+
+```{r - 3 most common themes}
+most_common_themes <- lego_customers %>%
+  count(theme,sort = T, name = "Count") %>% 
+head(3)
+most_common_themes
+```
+
+As we can see the three most common themes of lego sets purchased are Star Wars, Nexo Knights and Gear.
+
+### Exercise 5.
+
+Among the most common theme of Lego sets purchased, what is the most common subtheme?
+
+#### answer 5:
+
+```{r - most common subtheme}
+first_most_common <- head(most_common_themes,1)
+lego_customers %>%
+  count(subtheme,theme,sort = T, name = "Count") %>%
+  filter(theme == first_most_common$theme & !is.na(subtheme)) %>% 
+  top_n(1)
+  
+```
+
+As we can see the most common subset of lego is The Force Awaken with 15 purchases.
+
+### Exercise 6.
+
+Create a new variable called age_group and group the ages into the following categories: "18 and under", "19 - 25", "26 - 35", "36 - 50", "51 and over".
+
+#### answer 6:
+
+I will use the mutate function to add the new age_group column and split in to each case of age.
+
+```{r -creade age group col}
+lego_customers <- lego_customers %>%
+  mutate(age_group = case_when(
+    age <= 18 ~ "18 and under",
+    age >= 19 & age <=25 ~ "19 - 25",
+    age >= 26 & age <=35 ~ "26 - 35",
+    age >= 36 & age <= 50 ~ "36 - 50",
+    age >= 51 ~ "51 and over"))
+```
+
+### Exercise 7.
+
+Which age group has purchased the highest number of Lego sets.
+
+#### answer 7:
+
+Here i took the number of lego sets purchased because that what the question aimed for.
+
+I will sum all the quantities of each group age and then create a new df that saves the total lego set purchases values.
+
+From the new df i will take the age category with the most total lego sets purchases.
+
+```{r - check purchase by age group}
+age_purchase <- lego_customers %>%
+  count(age_group,quantity, sort = T, name = "Count") %>%
+  mutate(total_lego_sets = quantity * Count)
+age_purchase <- aggregate(total_lego_sets ~ age_group, age_purchase, sum)
+age_purchase %>% arrange(total_lego_sets,desc()) %>%
+  filter(row_number() == n())
+```
+
+As we can see the group age with the highest number of Lego sets purchased is 35 - 50 with 313 lego sets.
+
+### Exercise 8.
+
+Which age group has spent the most money on Legos? Why do you think this specific group spent more money than other groups?
+
+#### answer 8:
+
+I will do almost the same as i did in question 7 , create a df that contains total purchase price, then i will sum by age category the total purchase and save the highest value row of total purchase price
+
+```{r - check money spend by age group}
+most_money_age <- lego_customers %>%
+  mutate(total_money = quantity * us_price) %>%
+  count(age_group,total_money)
+most_money_age <- aggregate(total_money ~ age_group, most_money_age, sum) %>%
+   arrange(total_money,desc()) %>%
+  filter(row_number() == n())
+most_money_age
+```
+
+As we can see age group 36 - 50 spend the most money on Legos with amount of 4345.64
+
+We can assume that they spend the most money because they purchased the highest number of lego sets.
+
+### Exercise 9.
+
+Which area code has spent the most money on Legos? In the US the area code is the first 3 digits of a phone number.
+
+#### answer 9:
+
+I will create a column of area code and then i will do the same as i did in question 9.
+
+```{r - check money spend by area code}
+most_money_area <-lego_customers %>%
+  mutate(area_code = str_sub(phone_number, start = 0, end = 3))
+most_money_area <- most_money_area %>%
+  mutate(total_money = quantity * us_price) %>%
+  count(area_code,total_money)
+most_money_area <- aggregate(total_money ~ area_code, most_money_area, sum) %>%
+   arrange(total_money,desc()) %>%
+  filter(row_number() == n())
+most_money_area
+```
+
+As we can see, area 956 spent the most money on lego sets.
+
+### Exercise 10.
+
+Come up with a question you want to answer using these data, and write it down. Then, create a data visualization that answers the question, and explain how your visualization answers the question.
+
+#### answer 10:
+
+I know that buying a lego set with more pieces probably will cost more then buying set with less pieces but i wanted to see if i can see that from this data set.
+
+So, i've created a point plot with linear regression between pieces of the set and the price for that set.
+
+```{r - plot pieces - us price}
+ggplot(lego_customers, aes(x = pieces, y = us_price)) +
+  xlim(0, 1500) + ylim(0, 150) +geom_point() + geom_smooth(method = "lm",se = F) +
+  labs(x = "Pieces", y = "US price ($)", title = "Point plot with Linear regression ", subtitle = "Between Us price and pieces of lego set")
+```
+
+We can see that there is a linear relation between number of pieces to US price. As the number of pieces increase the price goes up.
+
+I have added two more plots to get some insights over the data.
+
+```{r - plot theme count by age group}
+ggplot(lego_customers, aes(y = forcats::fct_infreq(theme), fill = age_group)) + 
+  geom_histogram(stat = "count") + 
+  labs(x = "Count",y = "Theme", fill = "Age Group", title = "Histogram plot of purchase by Theme and Age group")
+```
+
+We can see from this plot the themes that are purchased the most and which age category doesn't buy some lego with specific theme and wonder why they don't buy it.
+
+If we were working for lego we would know which theme to advertise for which age group to have higher number of sales.
+
+```{r - plot avg spend by age}
+spent_by_age <- lego_customers %>%
+  group_by(age) %>%
+  summarise(avg_spend = mean(us_price))
+
+ggplot(spent_by_age, aes(x = age, y = avg_spend)) +
+  geom_point() + geom_smooth( se = F) +
+  labs(x = "Age", y = "Average spend", title = "Average spend by Age plot")
+```
+
+We can see here that people who are 45 years old tend to spend more money in average that the other age groups. Younger people tend to spend less, maybe because the lego themes are for older group category or those themes was initialized close to the ages of the older age groups.
+
+### Exercise 11.
+
+Among the lego `Star Wars` theme, select the top 6 most common subthemes. Then, visualize `pieces` and `us_price` on a faceted box plot, comparing the different subthemes (where subthemes are on one axis, and the value of `pieces` and `us_price` is on the other axis. **instruction**: use a `pivot` function)
+
+#### answer 11:
+
+First of all, i will find the 6 most common subthemes of Star Wars theme.
+
+```{r - 6 most common subthemes}
+top_6_subThemes <-lego_customers %>%
+  filter( theme == "Star Wars") %>%
+  count(subtheme, sort = T, name = "Count") %>% top_n(6) %>% 
+  select(subtheme); top_6_subThemes
+
+```
+
+Then, i will use pivot longer and plot them in a facet box plot where i join the pieces and US price to the same axis.
+
+```{r - facet box plot}
+plot <- lego_customers %>% 
+  filter(theme == "Star Wars" & subtheme %in% top_6_subThemes$subtheme) %>% 
+  pivot_longer(c(us_price,pieces),names_to = "category",values_to = "values") %>%    mutate(category = case_when(category == "us_price"~ "US price ($)", category == "pieces" ~ "Pieces")) %>% 
+  select(subtheme,category,values) %>% 
+  ggplot(aes(x = values, y = subtheme)) +
+  geom_boxplot(aes(fill = category)) + facet_wrap(~category,nrow = 1, scales = "free") + 
+  theme(legend.position = 'right') +
+  labs(y = "Sub Theme", x = "Value", title = "Facet box plot of Star Wars Subthemes", subtitle = "With US price and number of Pieces", fill = "Category")
+plot
+```
